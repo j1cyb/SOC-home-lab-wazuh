@@ -32,16 +32,22 @@ A simulated adversary, assumed to already have a foothold on the endpoint (initi
 - Windows Advanced Audit Policy configured to log Scheduled Task and Object Access events
 - Baseline knowledge of normal endpoint behavior (no scheduled tasks, no unusual services, no unexplained files in `C:\Users\Public`)
 
+---
+
 ### 2. Identification
 
 **Trigger alert:**
-```
-Rule 60228 — "A scheduled task was created"
-Task Name: SystemUpdateCheck
-Run As: SYSTEM
-Trigger: ONSTART
-Level: 4
-```
+
+- Rule 60228 — "A scheduled task was created"
+- Task Name: `SystemUpdateCheck`
+- Run As: SYSTEM
+- Trigger: ONSTART
+- Level: 4
+
+*Note: this alert fired on `SystemUpdateCheck2`, created after the audit policy fix. The original task went unlogged — see the SOC Home Lab README for the full root-cause analysis.*
+
+![Scheduled task alert](screenshots/03-scheduled-task/04-siem-alerts-after-fix.png)
+![Alert detail](screenshots/03-scheduled-task/05-alert-detail-eventid-4698.png)
 
 **Verification checklist:**
 
@@ -56,28 +62,32 @@ Level: 4
 
 **Building the fuller picture:** For this exercise, I connected this task creation to three other techniques I'd tested separately in the same lab, to walk through how they'd read as a single incident if seen together on one host:
 
-```
-Rule 92307 — Evidence pointing to Alternate Data Stream usage in C:\Users\Public\report.txt
-Rule 92073 — Powershell executing certutil to decode a file (Level 6, MITRE T1140)
-vssadmin activity — shadow copy enumeration commands
-```
+- Rule 92307 — Evidence pointing to Alternate Data Stream usage in `C:\Users\Public\report.txt`
+- Rule 92073 — Powershell executing certutil to decode a file (Level 6, MITRE T1140)
+- `vssadmin` activity — shadow copy enumeration commands
 
 Framed together, this reads as a persistence attempt (the task) paired with two separate defense-evasion techniques (ADS, CertUtil) and a discovery step checking for a path to credential material (VSS) — a coherent intrusion pattern rather than one isolated event.
+
+![CertUtil decode alert](screenshots/06-certutil-lolbin/02-siem-alert.png)
+
+---
 
 ### 3. Containment
 
 These are the containment steps I'd take based on this scenario. I didn't execute all of them live in the lab — some assume a real incident context, not the controlled testing I actually did.
 
-1. **Isolate the host from the network** to prevent lateral movement or C2 communication (in a live incident; in this lab, this would mean disconnecting the VM's virtual network adapter)
-2. **Disable the scheduled task** without deleting it yet, to preserve it for forensic review:
-   ```powershell
-   schtasks /change /tn "SystemUpdateCheck" /disable
-   ```
-3. **Preserve the file with the hidden ADS stream** rather than deleting it immediately — extract the stream content first as evidence:
-   ```powershell
-   Get-Item -Path C:\Users\Public\report.txt -Stream hidden
-   ```
-4. **If a certutil-related process were still running, avoid killing it immediately** — capture process details first (PID, parent process, command line) for the investigation record
+- Isolate the host from the network to prevent lateral movement or C2 communication (in a live incident; in this lab, this would mean disconnecting the VM's virtual network adapter)
+- Disable the scheduled task without deleting it yet, to preserve it for forensic review:
+           schtasks /change /tn "SystemUpdateCheck" /disable
+
+- Preserve the file with the hidden ADS stream rather than deleting it immediately — extract the stream content first as evidence:
+Get-Item -Path C:\Users\Public\report.txt -Stream hidden
+  
+![ADS stream extraction](screenshots/05-alternate-data-streams/03-custom-hunt-script.png)
+
+- If a certutil-related process were still running, avoid killing it immediately — capture process details first (PID, parent process, command line) for the investigation record
+
+---
 
 ### 4. Eradication
 
@@ -94,12 +104,15 @@ Remove-Item C:\Users\Public\report.txt -Force
 Remove-Item C:\Users\Public\payload*.txt -Force
 ```
 
-**Check for additional persistence** in commonly abused locations before considering the host clean:
+Check for additional persistence in commonly abused locations before considering the host clean:
+
 ```powershell
 Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 schtasks /query /fo LIST | Select-String "SYSTEM"
 sc.exe query state= all | Select-String -Context 0,2 "SERVICE_NAME"
 ```
+
+---
 
 ### 5. Recovery
 
@@ -108,14 +121,18 @@ sc.exe query state= all | Select-String -Context 0,2 "SERVICE_NAME"
 - Monitor the endpoint for 24–48 hours post-incident for recurrence of the same indicators
 - Confirm with the system owner that containment didn't disrupt any legitimate process
 
+---
+
 ### 6. Lessons Learned
 
 | Gap Identified | Root Cause | Recommendation |
 |---|---|---|
-| Scheduled Task creation wasn't logged until fixed | Advanced Audit Policy subcategory disabled by default | Enable `"Other Object Access Events"` auditing as a standard hardening baseline, not a reactive fix |
-| ADS activity wasn't detected by any layer tested | No native SIEM or Sysmon coverage for NTFS alternate data streams | Run the custom PowerShell ADS-detection script (see [SOC Home Lab README](./README.md#4-alternate-data-streams-ads--defense-evasion)) as a scheduled recurring scan |
+| Scheduled Task creation wasn't logged until fixed | Advanced Audit Policy subcategory disabled by default | Enable "Other Object Access Events" auditing as a standard hardening baseline, not a reactive fix |
+| ADS activity wasn't detected by any layer tested | No native SIEM or Sysmon coverage for NTFS alternate data streams | Run the custom PowerShell ADS-detection script (see SOC Home Lab README) as a scheduled recurring scan |
 | Registry Run key persistence also went undetected (tested separately, not part of this chain) | FIM doesn't monitor `HKCU\...\Run` by default | Add this path explicitly to the Wazuh `<syscheck>` configuration |
 | No shadow copies existed on the host | System Protection / VSS not enabled | Enable System Protection as a baseline control — helps both backup posture and forensic recovery options |
+
+![VSS assessment](screenshots/07-volume-shadow-copy/01-vssadmin-assessment.png)
 
 **Takeaway:** Each of these gaps is manageable when looked at on its own. Sequenced together into one incident, though, they'd let an attacker persist, hide, and scope out further access without a single automatic alert along most of the chain — only the scheduled task (after remediation) and the CertUtil step would have triggered anything. That gap between "individually explainable" and "collectively serious" is the main reason I think chained scenarios like this are worth building, not just single-technique tests.
 
@@ -128,7 +145,7 @@ This sequences the four techniques as a plausible single incident, using the rea
 | Step | Action | Rule ID | Level | Detected? |
 |---|---|---|---|---|
 | 1 | Scheduled Task created (`SystemUpdateCheck`) | — | — | No, initially |
-| 1b | *(after audit policy fix)* Second task created (`SystemUpdateCheck2`) | 60228 | 4 | Yes |
+| 1b | (after audit policy fix) Second task created (`SystemUpdateCheck2`) | 60228 | 4 | Yes |
 | 1c | Audit policy change itself flagged | 60112 | 8 | Yes |
 | 2 | ADS payload hidden in `report.txt` | — | — | No |
 | 3 | CertUtil used to decode payload via PowerShell | 92073 | 6 | Yes |
@@ -136,4 +153,4 @@ This sequences the four techniques as a plausible single incident, using the rea
 
 ---
 
-*This playbook is a companion to the [SOC Home Lab project](./README.md). All commands, rule IDs, and detection outcomes referenced here come directly from that project's testing.*
+*This playbook is a companion to the SOC Home Lab project. All commands, rule IDs, and detection outcomes referenced here come directly from that project's testing.*
