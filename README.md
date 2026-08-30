@@ -124,6 +124,18 @@ auditpol /set /subcategory:"Other Object Access Events" /success:enable /failure
 
 **Conclusion:** This demonstrated a complete detection engineering cycle: simulate, find the gap, trace it to a root cause, apply a fix, and confirm the fix actually closed the gap.
 
+
+<details>
+<summary><b>Evidence (6 screenshots)</b></summary>
+
+![Task created](screenshots/03-scheduled-task/01-attack-executed.png)
+![No alert](screenshots/03-scheduled-task/02-siem-no-alert.png)
+![Audit policy enabled and retest](screenshots/03-scheduled-task/03-audit-policy-and-retest.png)
+![Alerts after fix](screenshots/03-scheduled-task/04-siem-alerts-after-fix.png)
+![Alert detail](screenshots/03-scheduled-task/05-alert-detail-eventid-4698.png)
+![MITRE mapping](screenshots/03-scheduled-task/06-alert-mitre-mapping.png)
+
+</details>
 ---
 
 ### 3. Fake/Suspicious Service Creation
@@ -145,6 +157,16 @@ sc.exe create WindowsUpdateHelper binPath= "C:\Windows\System32\notepad.exe" sta
 
 **Conclusion:** Useful contrast to Technique #2 — default Windows logging visibility depends heavily on the event category, not just whether Sysmon or the SIEM is running.
 
+
+<details>
+<summary><b>Evidence (4 screenshots)</b></summary>
+
+![Service created](screenshots/04-fake-service/01-attack-executed.png)
+![SIEM alerts](screenshots/04-fake-service/02-siem-alerts.png)
+![Alert detail](screenshots/04-fake-service/03-alert-detail-eventid-7045.png)
+![MITRE mapping](screenshots/04-fake-service/04-alert-mitre-mapping.png)
+
+</details>
 ---
 
 ### 4. Alternate Data Streams (ADS) — Defense Evasion
@@ -171,6 +193,15 @@ It successfully found the hidden `report.txt:hidden` stream. It's not automatic 
 
 **Conclusion:** SIEM tools have blind spots by design, and this is one I could confirm directly. Where native detection wasn't there, I built something that at least closes the gap manually.
 
+
+<details>
+<summary><b>Evidence (3 screenshots)</b></summary>
+
+![Stream created](screenshots/05-alternate-data-streams/01-attack-executed.png)
+![No alert](screenshots/05-alternate-data-streams/02-siem-no-alert.png)
+![Custom hunt script](screenshots/05-alternate-data-streams/03-custom-hunt-script.png)
+
+</details>
 ---
 
 ### 5. CertUtil Abuse (LOLBIN Simulation)
@@ -195,6 +226,17 @@ certutil -decode C:\Users\Public\payload_encoded.txt C:\Users\Public\payload_dec
 
 **Conclusion:** This gave the most useful triage context of everything I tested — process lineage, command line, user, and integrity level all captured automatically, without me having to dig for it.
 
+<details>
+<summary><b>Evidence (5 screenshots)</b></summary>
+
+![CertUtil executed](screenshots/06-certutil-lolbin/01-attack-executed.png)
+![SIEM alert](screenshots/06-certutil-lolbin/02-siem-alert.png)
+![Alert detail](screenshots/06-certutil-lolbin/03-alert-detail-commandline.png)
+![Sysmon process create](screenshots/06-certutil-lolbin/04-sysmon-process-create.png)
+![MITRE mapping](screenshots/06-certutil-lolbin/05-alert-mitre-mapping.png)
+
+</details>
+
 ---
 
 ### 6. Volume Shadow Copy Inspection — Precondition Assessment for Credential Access
@@ -214,6 +256,13 @@ vssadmin list volumes
 **Analysis:** No local Volume Shadow Copies were available as a recovery source at the time of testing. This means the specific VSS-to-SAM access path wasn't viable against this host in its current state — an attacker would need to wait for, or force, snapshot creation first. It also points to a potential recovery gap worth checking against whatever other backup mechanisms might be in place, rather than assuming there's no backup capability at all.
 
 **Conclusion:** Even without an executable exploit path, this kind of check has real value in an assessment — it tells you both what's *not* currently possible, and what's worth flagging for the defensive side (e.g., enabling System Protection).
+
+<details>
+<summary><b>Evidence (1 screenshot)</b></summary>
+
+![VSS assessment](screenshots/07-volume-shadow-copy/01-vssadmin-assessment.png)
+
+</details>
 
 ---
 
