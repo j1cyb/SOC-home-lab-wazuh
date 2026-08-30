@@ -64,6 +64,38 @@ New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Na
 
 **Conclusion:** This is a real gap in my default configuration, not a broken tool. Sysmon captured the right telemetry — the SIEM just wasn't configured to do anything with it for this specific path. I left this one undetected rather than patching it, so I'd have at least one documented gap that wasn't "fixed" — a more honest picture of where the setup stands.
 
+
+<details>
+<summary><b>Evidence (9 screenshots)</b></summary>
+
+**Run key created and verified**
+![Run key created](screenshots/02-registry-run-key/01-attack-executed.png)
+
+**Wazuh receiving events from the endpoint in the same window**
+![SIEM receiving events](screenshots/02-registry-run-key/02-siem-receiving-events.png)
+
+**Searching for the value name returns nothing**
+![No search results](screenshots/02-registry-run-key/03-siem-search-no-results.png)
+
+**Sysmon channel added to the agent configuration**
+![Agent config](screenshots/02-registry-run-key/04-agent-config-sysmon-channel.png)
+
+**Agent service restarted**
+![Service restarted](screenshots/02-registry-run-key/05-agent-service-restarted.png)
+
+**Technique re-executed with a second value**
+![Re-executed](screenshots/02-registry-run-key/06-attack-re-executed.png)
+
+**Sysmon Event ID 13 confirms the write was logged locally**
+![Sysmon EID 13](screenshots/02-registry-run-key/07-sysmon-eid13-logged.png)
+
+**Still no dedicated registry alert after re-testing**
+![Still no alert](screenshots/02-registry-run-key/08-siem-still-no-alert.png)
+
+**Agent log confirms connectivity and healthy scans**
+![Agent health](screenshots/02-registry-run-key/09-agent-health-check.png)
+
+</details>
 ---
 
 ### 2. Scheduled Task Abuse (ONSTART Trigger)
